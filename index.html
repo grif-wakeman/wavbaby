@@ -375,8 +375,8 @@
       <div class="spec-toggle" role="group" aria-label="Output format">
         <button type="button" class="spec-opt" data-group="bd" data-value="16" aria-pressed="false">16</button>
         <button type="button" class="spec-opt" data-group="bd" data-value="24" aria-pressed="true">24</button>
-        <button type="button" class="spec-opt" data-group="sr" data-value="44100" aria-pressed="true">44.1</button>
-        <button type="button" class="spec-opt" data-group="sr" data-value="48000" aria-pressed="false">48</button>
+        <button type="button" class="spec-opt" data-group="sr" data-value="44100" aria-pressed="false">44.1</button>
+        <button type="button" class="spec-opt" data-group="sr" data-value="48000" aria-pressed="true">48</button>
       </div>
       <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode"><span class="tm-light">light</span><span class="tm-arrow"></span><span class="tm-dark">dark</span></button>
     </div>
@@ -575,7 +575,7 @@ const state = {
 };
 let nextId = 0;
 let bitDepth = 24;       // 16 or 24 — header toggle, persisted to localStorage
-let sampleRate = 44100;  // 44100 or 48000 — header toggle, persisted to localStorage
+let sampleRate = 48000;  // 44100 or 48000 — header toggle, persisted to localStorage
 
 function addFiles(files) {
   const accepted = files.filter(f => isAudioFile(f));
