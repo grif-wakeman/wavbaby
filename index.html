@@ -95,11 +95,11 @@
   html:not([data-theme="dark"]) .theme-toggle .tm-arrow::before { content: "→"; }
   html[data-theme="dark"]       .theme-toggle .tm-arrow::before { content: "←"; }
 
-  .bitdepth-toggle {
+  .spec-toggle {
     display: inline-flex;
     line-height: 1;
   }
-  .bd-opt {
+  .spec-opt {
     background: var(--panel);
     border: 1px solid var(--line);
     padding: 0.25rem 0.5rem;
@@ -109,19 +109,27 @@
     color: var(--dim);
     cursor: pointer;
     transition: color 0.15s, background 0.15s, border-color 0.15s;
-    position: relative; /* so :hover z-index lifts the full border above its neighbor */
+    position: relative;
+    min-width: 2.25rem; /* keeps "16" and "44.1" feeling balanced despite different widths */
+    text-align: center;
   }
-  .bd-opt + .bd-opt { margin-left: -1px; } /* overlap the seam, no double-thick line */
-  .bd-opt[aria-pressed="true"] {
+  .spec-opt + .spec-opt { margin-left: -1px; } /* overlap shared seam */
+  /* Boundary between bit-depth pair and sample-rate pair: small visual gap
+     so users see two independent toggles, not one four-way picker. */
+  .spec-opt[data-group="sr"]:first-of-type,
+  .spec-opt[data-group="bd"] + .spec-opt[data-group="sr"] {
+    margin-left: 0.4rem;
+  }
+  .spec-opt[aria-pressed="true"] {
     color: var(--ink);
     background: var(--panel-2);
     font-weight: 700;
-    z-index: 1; /* keep the active segment's border visible over its neighbor */
+    z-index: 1;
   }
-  .bd-opt:hover {
+  .spec-opt:hover {
     color: var(--ink);
     border-color: var(--ink);
-    z-index: 2; /* lift hovered segment above pressed segment too */
+    z-index: 2;
   }
 
   .drop {
@@ -364,9 +372,11 @@
   <header>
     <h1>WAVbaby</h1>
     <div class="header-right">
-      <div class="bitdepth-toggle" role="group" aria-label="Bit depth">
-        <button type="button" class="bd-opt" data-bd="16" aria-pressed="false">16-bit</button>
-        <button type="button" class="bd-opt" data-bd="24" aria-pressed="true">24-bit</button>
+      <div class="spec-toggle" role="group" aria-label="Output format">
+        <button type="button" class="spec-opt" data-group="bd" data-value="16" aria-pressed="false">16</button>
+        <button type="button" class="spec-opt" data-group="bd" data-value="24" aria-pressed="true">24</button>
+        <button type="button" class="spec-opt" data-group="sr" data-value="44100" aria-pressed="true">44.1</button>
+        <button type="button" class="spec-opt" data-group="sr" data-value="48000" aria-pressed="false">48</button>
       </div>
       <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode"><span class="tm-light">light</span><span class="tm-arrow"></span><span class="tm-dark">dark</span></button>
     </div>
@@ -375,7 +385,7 @@
   <label class="drop" id="drop">
     <input type="file" id="file" accept="audio/*,.wav,.mp3,.aiff,.aif,.m4a,.flac,.ogg,.webm,.opus" multiple>
     <div class="drop-title">Drop audio files here, or click to select</div>
-    <div class="drop-sub">M4A · MP3 · AIFF · FLAC · OGG · WAV → 16-bit PCM WAV</div>
+    <div class="drop-sub">M4A · MP3 · AIFF · FLAC · OGG · WAV → PCM WAV</div>
   </label>
 
   <div class="status" id="status"></div>
@@ -385,7 +395,7 @@
       <div class="section-head">
         <span>Queue</span>
         <button class="info" type="button" id="queueInfo" aria-label="About conversion" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle class="info-ring" cx="12" cy="12" r="10.5" fill="none" stroke-width="1.5"/><circle class="info-dot" cx="12" cy="7" r="1.5"/><rect class="info-stem" x="10.75" y="10.5" width="2.5" height="7.5" rx="0.5"/></svg><span class="info-panel" role="tooltip">
-          <p>Source sample rate and channel count are preserved. Bit depth follows the toggle in the header — 24-bit is the standard sync deliverable, 16-bit is half the file size.</p>
+          <p>Channel count is preserved. Bit depth and sample rate follow the toggles in the header — files are resampled when the chosen rate differs from the source.</p>
           <p>Your browser may ask permission on the first multi-file batch. Allow it so every file downloads.</p>
         </span></button>
       </div>
@@ -440,28 +450,45 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Bit-depth toggle — restore from localStorage, default to 24-bit
+  // Spec toggles (bit depth + sample rate) — restore from localStorage, defaults: 24-bit, 44.1k
   const savedBd = (() => {
     try { return localStorage.getItem('wavbaby-bitdepth'); } catch (e) { return null; }
   })();
   if (savedBd === '16' || savedBd === '24') {
     bitDepth = parseInt(savedBd, 10);
   }
-  const bdOpts = document.querySelectorAll('.bd-opt');
-  const syncBdUI = () => {
-    bdOpts.forEach(el => {
-      const isActive = parseInt(el.dataset.bd, 10) === bitDepth;
-      el.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  const savedSr = (() => {
+    try { return localStorage.getItem('wavbaby-samplerate'); } catch (e) { return null; }
+  })();
+  if (savedSr === '44100' || savedSr === '48000') {
+    sampleRate = parseInt(savedSr, 10);
+  }
+
+  const specOpts = document.querySelectorAll('.spec-opt');
+  const syncSpecUI = () => {
+    specOpts.forEach(el => {
+      const group = el.dataset.group;
+      const val = parseInt(el.dataset.value, 10);
+      const active = (group === 'bd' && val === bitDepth) ||
+                     (group === 'sr' && val === sampleRate);
+      el.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
   };
-  syncBdUI();
-  bdOpts.forEach(el => {
+  syncSpecUI();
+  specOpts.forEach(el => {
     el.addEventListener('click', () => {
       // Don't allow swapping mid-batch — would produce inconsistent files
       if (state.processing) return;
-      bitDepth = parseInt(el.dataset.bd, 10);
-      try { localStorage.setItem('wavbaby-bitdepth', String(bitDepth)); } catch (e) {}
-      syncBdUI();
+      const group = el.dataset.group;
+      const val = parseInt(el.dataset.value, 10);
+      if (group === 'bd') {
+        bitDepth = val;
+        try { localStorage.setItem('wavbaby-bitdepth', String(val)); } catch (e) {}
+      } else if (group === 'sr') {
+        sampleRate = val;
+        try { localStorage.setItem('wavbaby-samplerate', String(val)); } catch (e) {}
+      }
+      syncSpecUI();
     });
   });
 
@@ -547,7 +574,8 @@ const state = {
   processing: false,
 };
 let nextId = 0;
-let bitDepth = 24; // 16 or 24 — toggled via header control, persisted to localStorage
+let bitDepth = 24;       // 16 or 24 — header toggle, persisted to localStorage
+let sampleRate = 44100;  // 44100 or 48000 — header toggle, persisted to localStorage
 
 function addFiles(files) {
   const accepted = files.filter(f => isAudioFile(f));
@@ -714,18 +742,43 @@ function triggerDownload(blob, filename) {
 //
 // RIFF/WAVE spec: http://soundfile.sapp.org/doc/WaveFormat/
 
+// Linear-interpolation resampler. Cheap, fast, audibly imperfect on critical
+// material — fine for sync deliverables in most cases, but a mastering engineer
+// could potentially detect aliasing on bright transient content. If that ever
+// matters, swap this for a windowed-sinc implementation.
+function resampleChannel(input, srcRate, dstRate) {
+  if (srcRate === dstRate) return input;
+  const ratio = srcRate / dstRate;
+  const outLen = Math.round(input.length / ratio);
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const srcIdx = i * ratio;
+    const i0 = Math.floor(srcIdx);
+    const i1 = Math.min(i0 + 1, input.length - 1);
+    const frac = srcIdx - i0;
+    out[i] = input[i0] * (1 - frac) + input[i1] * frac;
+  }
+  return out;
+}
+
 async function encodeWav(audio, onProgress) {
-  const sampleRate = audio.sampleRate;
+  const srcRate = audio.sampleRate;
+  const outRate = sampleRate; // module-level, from header toggle
   const nCh = audio.numberOfChannels;
-  const totalSamples = audio.length;
   const bits = bitDepth;                  // 16 or 24, from the header toggle
   const bytesPerSample = bits / 8;        // 2 or 3
 
-  // Pull channel data references (these are the raw Float32Arrays from the AudioBuffer)
+  // Pull channel data; resample if the user-chosen rate differs from source.
   const channels = [];
   for (let c = 0; c < nCh; c++) {
-    channels.push(audio.getChannelData(c));
+    let ch = audio.getChannelData(c);
+    if (srcRate !== outRate) {
+      ch = resampleChannel(ch, srcRate, outRate);
+    }
+    channels.push(ch);
   }
+  // After resampling, all channels share the same length.
+  const totalSamples = channels[0].length;
 
   // Interleaved PCM payload
   const dataByteLength = totalSamples * nCh * bytesPerSample;
@@ -745,8 +798,8 @@ async function encodeWav(audio, onProgress) {
   view.setUint32(16, 16, true);                          // Subchunk1Size = 16 for PCM
   view.setUint16(20, 1, true);                           // AudioFormat = 1 (PCM, no compression)
   view.setUint16(22, nCh, true);                         // NumChannels
-  view.setUint32(24, sampleRate, true);                  // SampleRate
-  view.setUint32(28, sampleRate * nCh * bytesPerSample, true); // ByteRate
+  view.setUint32(24, outRate, true);                     // SampleRate
+  view.setUint32(28, outRate * nCh * bytesPerSample, true); // ByteRate
   view.setUint16(32, nCh * bytesPerSample, true);        // BlockAlign
   view.setUint16(34, bits, true);                        // BitsPerSample
 
